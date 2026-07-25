@@ -34,7 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * @author xgraza, Shoreline
+ * @author xgraza, Shoreline, zavzagali
  * @since 1.0
  */
 public final class ScaffoldModule extends BlockPlacerModule
@@ -51,6 +51,9 @@ public final class ScaffoldModule extends BlockPlacerModule
     Config<Boolean> renderConfig = register(new BooleanConfig("Render", "Renders where scaffold is placing blocks", false));
     Config<Integer> fadeTimeConfig = register(new NumberConfig<>("Fade-Time", "Timer for the fade", 0, 250, 1000, () -> false));
     Config<Boolean> stopMotionConfig = register(new BooleanConfig("StopMotion", "Stops player motion when placing blocks", false));
+
+    Config<Integer> rangeConfig = register(new NumberConfig<>("Range", "Places more blocks in the direction of movement", 1, 1, 5, () -> true));
+    Config<Boolean> rangeSilentConfig = register(new BooleanConfig("RangeSilent", "Makes extra block place silent", true, () -> rangeConfig.getValue() > 1));
 
     private final Map<BlockPos, Animation> fadeList = new HashMap<>();
     private BlockData blockData;
@@ -96,8 +99,8 @@ public final class ScaffoldModule extends BlockPlacerModule
             renderData = null;
             return;
         }
-        renderData = getBlockData(false);
-        blockData = getBlockData(rotateHoldConfig.getValue());
+        renderData = getBlockData(false, 0);
+        blockData = getBlockData(rotateHoldConfig.getValue(), 0);
         if (blockData == null)
         {
             if (grimNewConfig.getValue() && rotateConfig.getValue())
@@ -113,7 +116,6 @@ public final class ScaffoldModule extends BlockPlacerModule
                     {
                         yaw += 45.0f;
                     }
-                    // Forward movement - no change to yaw
                 }
                 else if (mc.options.backKey.isPressed() && !mc.options.forwardKey.isPressed())
                 {
@@ -206,6 +208,50 @@ public final class ScaffoldModule extends BlockPlacerModule
                 }
             }
         }
+
+        placeRangeBlocks(slot);
+    }
+
+    private void placeRangeBlocks(int slot)
+    {
+        int range = rangeConfig.getValue();
+        if (range <= 1)
+        {
+            return;
+        }
+
+        for (int i = 1; i < range; i++)
+        {
+            BlockData extra = getBlockData(false, i);
+            if (extra == null)
+            {
+                continue;
+            }
+
+            calcRotations(extra);
+            final float[] rotations = extra.getAngles();
+            if (rotations == null)
+            {
+                continue;
+            }
+
+            Managers.INTERACT.placeBlock(extra.getBlockPos(), slot, false, false, false, (state, angles) ->
+            {
+                if (!state)
+                {
+                    return;
+                }
+
+                if (rangeSilentConfig.getValue() || isGrim())
+                {
+                    Managers.ROTATION.setRotationSilent(rotations[0], rotations[1]);
+                }
+                else if (rotateConfig.getValue())
+                {
+                    setRotation(rotations[0], rotations[1]);
+                }
+            });
+        }
     }
 
     @EventListener
@@ -235,6 +281,18 @@ public final class ScaffoldModule extends BlockPlacerModule
             {
                 Animation animation = new Animation(true, fadeTimeConfig.getValue());
                 fadeList.put(renderData.getBlockPos(), animation);
+
+                int range = rangeConfig.getValue();
+                for (int i = 1; i < range; i++)
+                {
+                    BlockData extraRender = getBlockData(false, i);
+                    if (extraRender == null || extraRender.getHitResult() == null)
+                    {
+                        continue;
+                    }
+                    Animation extraAnimation = new Animation(true, fadeTimeConfig.getValue());
+                    fadeList.put(extraRender.getBlockPos(), extraAnimation);
+                }
             }
 
             fadeList.entrySet().removeIf(e ->
@@ -252,7 +310,42 @@ public final class ScaffoldModule extends BlockPlacerModule
         blockData.setHitResult(new BlockHitResult(basicHitVec, side, pos, false));
     }
 
-    private BlockData getBlockData(boolean hold)
+    private Direction getMovementDirection()
+    {
+        Vec3d velocity = mc.player.getVelocity();
+        double x = velocity.x;
+        double z = velocity.z;
+
+        if (x * x + z * z < 0.0025)
+        {
+            return null;
+        }
+
+        if (Math.abs(x) > Math.abs(z))
+        {
+            return x > 0 ? Direction.EAST : Direction.WEST;
+        }
+        else
+        {
+            return z > 0 ? Direction.SOUTH : Direction.NORTH;
+        }
+    }
+
+    private BlockPos getRangeOffset(int distance)
+    {
+        if (distance <= 0)
+        {
+            return BlockPos.ORIGIN;
+        }
+        Direction dir = getMovementDirection();
+        if (dir == null)
+        {
+            return BlockPos.ORIGIN;
+        }
+        return new BlockPos(dir.getOffsetX() * distance, 0, dir.getOffsetZ() * distance);
+    }
+
+    private BlockData getBlockData(boolean hold, int rangeIndex)
     {
         int posY = (int) Math.round(mc.player.getY()) - 1;
         if (keepYConfig.getValue() && MovementUtil.isInputtingMovement())
@@ -263,8 +356,10 @@ public final class ScaffoldModule extends BlockPlacerModule
             }
             posY = groundPosY;
         }
-        final BlockPos pos = PositionUtil.getRoundedBlockPos(
+        final BlockPos basePos = PositionUtil.getRoundedBlockPos(
                 mc.player.getX(), posY, mc.player.getZ());
+        final BlockPos pos = basePos.add(getRangeOffset(rangeIndex));
+
         if (!hold && !mc.world.getBlockState(pos).isReplaceable())
         {
             return null;

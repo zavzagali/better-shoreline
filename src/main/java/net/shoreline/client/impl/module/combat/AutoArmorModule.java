@@ -24,28 +24,24 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 
 /**
- * @author linus
+ * @author zavzagali
  * @since 1.0
  */
 public class AutoArmorModule extends ToggleModule
 {
-
-    //
+    // Configs
     Config<Priority> priorityConfig = register(new EnumConfig<>("Priority", "Armor enchantment priority", Priority.BLAST_PROTECTION, Priority.values()));
     Config<Float> minDurabilityConfig = register(new NumberConfig<>("MinDurability", "Durability percent to replace armor", 0.0f, 0.0f, 20.0f, NumberDisplay.PERCENT));
     Config<Boolean> elytraPriorityConfig = register(new BooleanConfig("ElytraPriority", "Prioritizes existing elytras in the chestplate armor slot", true));
     Config<Boolean> blastLeggingsConfig = register(new BooleanConfig("Leggings-BlastPriority", "Prioritizes Blast Protection leggings", true));
     Config<Boolean> noBindingConfig = register(new BooleanConfig("NoBinding", "Avoids armor with the Curse of Binding enchantment", true));
     Config<Boolean> inventoryConfig = register(new BooleanConfig("AllowInventory", "Allows armor to be swapped while in the inventory menu", false));
-    //
+
     private final Queue<ArmorSlot> helmet = new PriorityQueue<>();
     private final Queue<ArmorSlot> chestplate = new PriorityQueue<>();
     private final Queue<ArmorSlot> leggings = new PriorityQueue<>();
     private final Queue<ArmorSlot> boots = new PriorityQueue<>();
 
-    /**
-     *
-     */
     public AutoArmorModule()
     {
         super("AutoArmor", "Automatically replaces armor pieces", ModuleCategory.COMBAT);
@@ -54,15 +50,18 @@ public class AutoArmorModule extends ToggleModule
     @EventListener
     public void onTick(PlayerTickEvent event)
     {
+        if (mc.player == null) return;
+        
         if (mc.currentScreen != null && !(mc.currentScreen instanceof InventoryScreen && inventoryConfig.getValue()))
         {
             return;
         }
-        //
+
         helmet.clear();
         chestplate.clear();
         leggings.clear();
         boots.clear();
+
         for (int j = 0; j < 36; j++)
         {
             ItemStack stack = mc.player.getInventory().getStack(j);
@@ -76,10 +75,12 @@ public class AutoArmorModule extends ToggleModule
             }
             int index = armor.getSlotType().getEntitySlotId();
             float dura = (stack.getMaxDamage() - stack.getDamage()) / (float) stack.getMaxDamage();
-            if (dura < minDurabilityConfig.getValue())
+            
+            if (stack.getMaxDamage() > 0 && dura < minDurabilityConfig.getValue())
             {
                 continue;
             }
+            
             ArmorSlot data = new ArmorSlot(index, j, stack);
             switch (index)
             {
@@ -89,18 +90,25 @@ public class AutoArmorModule extends ToggleModule
                 case 3 -> boots.add(data);
             }
         }
+
         for (int i = 0; i < 4; i++)
         {
             ItemStack armorStack = mc.player.getInventory().getArmorStack(i);
-            if (elytraPriorityConfig.getValue() && armorStack.getItem() == Items.ELYTRA)
+            
+            if (i == 1 && elytraPriorityConfig.getValue() && armorStack.getItem() == Items.ELYTRA)
             {
                 continue;
             }
-            float armorDura = (armorStack.getMaxDamage() - armorStack.getDamage()) / (float) armorStack.getMaxDamage();
-            if (!armorStack.isEmpty() || armorDura >= minDurabilityConfig.getValue())
+
+            float armorDura = armorStack.getMaxDamage() > 0 
+                    ? (armorStack.getMaxDamage() - armorStack.getDamage()) / (float) armorStack.getMaxDamage() 
+                    : 1.0f;
+
+            if (!armorStack.isEmpty() && armorDura >= minDurabilityConfig.getValue())
             {
                 continue;
             }
+
             switch (i)
             {
                 case 0 ->
@@ -142,8 +150,8 @@ public class AutoArmorModule extends ToggleModule
     public void swapArmor(int armorSlot, int slot)
     {
         ItemStack stack = mc.player.getInventory().getArmorStack(armorSlot);
-        //
         armorSlot = 8 - armorSlot;
+        
         Managers.INVENTORY.pickupSlot(slot < 9 ? slot + 36 : slot);
         boolean rt = !stack.isEmpty();
         Managers.INVENTORY.pickupSlot(armorSlot);
@@ -159,7 +167,6 @@ public class AutoArmorModule extends ToggleModule
         PROTECTION(Enchantments.PROTECTION),
         PROJECTILE_PROTECTION(Enchantments.PROJECTILE_PROTECTION);
 
-        //
         private final RegistryKey<Enchantment> enchant;
 
         Priority(RegistryKey<Enchantment> enchant)
@@ -189,10 +196,8 @@ public class AutoArmorModule extends ToggleModule
         return false;
     }
 
-    //
     public class ArmorSlot implements Comparable<ArmorSlot>
     {
-        //
         private final int armorType;
         private final int slot;
         private final ItemStack armorStack;
@@ -214,26 +219,29 @@ public class AutoArmorModule extends ToggleModule
             final ItemStack otherStack = other.getArmorStack();
             ArmorItem armorItem = (ArmorItem) armorStack.getItem();
             ArmorItem otherItem = (ArmorItem) otherStack.getItem();
-            int durabilityDiff = armorItem.getMaterial().value().getProtection(armorItem.getType())
-                    - otherItem.getMaterial().value().getProtection(otherItem.getType());
-            if (durabilityDiff != 0)
+            
+            int protectionDiff = otherItem.getMaterial().value().getProtection(otherItem.getType())
+                    - armorItem.getMaterial().value().getProtection(armorItem.getType());
+            if (protectionDiff != 0)
             {
-                return durabilityDiff;
+                return protectionDiff;
             }
+
             RegistryKey<Enchantment> enchantment = priorityConfig.getValue().getEnchantment();
-            if (blastLeggingsConfig.getValue() && armorType == 2
-                    && hasEnchantment(armorStack, Enchantments.BLAST_PROTECTION))
+            if (blastLeggingsConfig.getValue() && armorType == 2)
             {
-                return -1;
+                boolean thisBlast = hasEnchantment(armorStack, Enchantments.BLAST_PROTECTION);
+                boolean otherBlast = hasEnchantment(otherStack, Enchantments.BLAST_PROTECTION);
+                if (thisBlast && !otherBlast) return -1;
+                if (!thisBlast && otherBlast) return 1;
             }
-            if (hasEnchantment(armorStack, enchantment))
-            {
-                return hasEnchantment(otherStack, enchantment) ? 0 : -1;
-            }
-            else
-            {
-                return hasEnchantment(otherStack, enchantment) ? 1 : 0;
-            }
+
+            boolean thisHas = hasEnchantment(armorStack, enchantment);
+            boolean otherHas = hasEnchantment(otherStack, enchantment);
+            if (thisHas && !otherHas) return -1;
+            if (!thisHas && otherHas) return 1;
+
+            return 0;
         }
 
         public ItemStack getArmorStack()

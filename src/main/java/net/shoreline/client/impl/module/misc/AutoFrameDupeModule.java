@@ -21,7 +21,7 @@ import net.shoreline.client.impl.event.TickEvent;
 import net.shoreline.eventbus.annotation.EventListener;
 
 /**
- * @author zavzagali
+ * @author ImLegiitXD, zavzagali
  * @since 1.0
  */
 public class AutoFrameDupeModule extends ToggleModule

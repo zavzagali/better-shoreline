@@ -9,4 +9,4 @@ I'll update this if theres new jar leaks
 ![image](https://github.com/user-attachments/assets/ab74c01c-0181-4c6e-bc3d-00dc76bbd8ff)
 
 ### **Credits**  
-- **[Skitttyy](https://github.com/Skitttyy/shoreline-client)** – for the src  
+- **[Skitttyy](https://github.com/Skitttyy/shoreline-client) & [ImLegiitXD](https://github.com/ImLegiitXD/shoreline)** – for the src  

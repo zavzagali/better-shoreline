@@ -24,7 +24,7 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 
 /**
- * @author zavzagali
+ * @author linus, zavzagali
  * @since 1.0
  */
 public class AutoArmorModule extends ToggleModule

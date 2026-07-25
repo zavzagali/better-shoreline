@@ -6,7 +6,12 @@ import net.minecraft.entity.decoration.ItemFrameEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
+import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
 import net.shoreline.client.api.config.Config;
 import net.shoreline.client.api.config.setting.BooleanConfig;
 import net.shoreline.client.api.config.setting.NumberConfig;
@@ -16,23 +21,22 @@ import net.shoreline.client.impl.event.TickEvent;
 import net.shoreline.eventbus.annotation.EventListener;
 
 /**
- * @author ImLegiitXD
+ * @author zavzagali
  * @since 1.0
  */
-
-// pasted from ???
 public class AutoFrameDupeModule extends ToggleModule
 {
     Config<Float> range = register(new NumberConfig<>("Range", "The maximum distance to interact with item frames", 1f, 5f, 7f));
     Config<Integer> turns = register(new NumberConfig<>("Turns", "How many times to rotate the item in the frame", 1, 5, 10));
     Config<Integer> ticks = register(new NumberConfig<>("Ticks", "Delay between interactions in ticks", 1, 5, 10));
     Config<Boolean> switchxd = register(new BooleanConfig("Switch", "Automatically switch to shulker boxes when needed", true));
+    Config<Boolean> autoPlace = register(new BooleanConfig("AutoPlace", "Automatically place item frames if none are in range", true));
 
     private int timeoutTicks = 0;
 
     public AutoFrameDupeModule()
     {
-        super("AutoFrameDupe", "Automatically dupes using frames", ModuleCategory.MISCELLANEOUS);
+        super("AutoFrameDupe", "Automatically places, rotates, and breaks frames for duping within range", ModuleCategory.MISCELLANEOUS);
     }
 
     @EventListener
@@ -40,42 +44,131 @@ public class AutoFrameDupeModule extends ToggleModule
     {
         if (mc.world == null || mc.player == null || mc.interactionManager == null) return;
 
-        for (Entity entity : mc.world.getEntities()) {
-            if (entity instanceof ItemFrameEntity frame && mc.player.distanceTo(frame) <= range.getValue()) {
-                if (timeoutTicks >= ticks.getValue()) {
+        boolean foundFrame = false;
+
+        for (Entity entity : mc.world.getEntities()) 
+        {
+            if (entity instanceof ItemFrameEntity frame && mc.player.distanceTo(frame) <= range.getValue()) 
+            {
+                foundFrame = true;
+                if (timeoutTicks >= ticks.getValue()) 
+                {
                     ItemStack displayedItem = frame.getHeldItemStack();
                     boolean hasItem = !displayedItem.isEmpty();
                     boolean isHolding = !mc.player.getMainHandStack().isEmpty();
 
-                    if (switchxd.getValue() && (!isHolding || !isShulkerBox(mc.player.getMainHandStack()))) {
+                    if (switchxd.getValue() && (!isHolding || !isShulkerBox(mc.player.getMainHandStack()))) 
+                    {
                         int shulkerSlot = findShulkers();
-                        if (shulkerSlot != -1) {
+                        if (shulkerSlot != -1) 
+                        {
                             mc.player.getInventory().selectedSlot = shulkerSlot;
                             isHolding = true; 
                         }
                     }
 
-                    if (!hasItem && isHolding) {
+                    if (!hasItem && isHolding) 
+                    {
                         mc.interactionManager.interactEntity(mc.player, frame, Hand.MAIN_HAND);
                     }
 
-                    if (hasItem) {
-                        for (int i = 0; i < turns.getValue(); i++) {
+                    if (hasItem) 
+                    {
+                        for (int i = 0; i < turns.getValue(); i++) 
+                        {
                             mc.interactionManager.interactEntity(mc.player, frame, Hand.MAIN_HAND);
                         }
                         mc.interactionManager.attackEntity(mc.player, frame);
                     }
 
                     timeoutTicks = 0;
-                } else {
+                } 
+                else 
+                {
                     timeoutTicks++;
                 }
+                break; 
+            }
+        }
+
+        if (!foundFrame && autoPlace.getValue()) 
+        {
+            if (timeoutTicks >= ticks.getValue()) 
+            {
+                int frameSlot = findItemFrame();
+                if (frameSlot != -1) 
+                {
+                    int oldSlot = mc.player.getInventory().selectedSlot;
+
+                    if (frameSlot >= 9 && frameSlot < 36) 
+                    {
+                        mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, frameSlot, mc.player.getInventory().selectedSlot, SlotActionType.SWAP, mc.player);
+                    } 
+                    else if (frameSlot < 9) 
+                    {
+                        mc.player.getInventory().selectedSlot = frameSlot;
+                    }
+
+                    BlockHitResult placementHit = findBestBlockInRange();
+                    if (placementHit != null) 
+                    {
+                        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, placementHit);
+                        mc.player.swingHand(Hand.MAIN_HAND); 
+                    }
+
+                    mc.player.getInventory().selectedSlot = oldSlot;
+                    timeoutTicks = 0;
+                } 
+                else 
+                {
+                    timeoutTicks++;
+                }
+            } 
+            else 
+            {
+                timeoutTicks++;
             }
         }
     }
 
+    private BlockHitResult findBestBlockInRange() 
+    {
+        BlockPos playerPos = mc.player.getBlockPos();
+        int r = (int) Math.ceil(range.getValue());
 
-    private boolean isShulkerBox(ItemStack stack) {
+        for (int x = -r; x <= r; x++) 
+        {
+            for (int y = -r; y <= r; y++) 
+            {
+                for (int z = -r; z <= r; z++) 
+                {
+                    BlockPos pos = playerPos.add(x, y, z);
+                    if (!mc.world.getBlockState(pos).isAir()) 
+                    {
+                        for (Direction dir : Direction.values()) 
+                        {
+                            BlockPos offsetPos = pos.offset(dir);
+                            if (mc.world.getBlockState(offsetPos).isAir()) 
+                            {
+                                double dist = mc.player.squaredDistanceTo(offsetPos.getX() + 0.5, offsetPos.getY() + 0.5, offsetPos.getZ() + 0.5);
+                                if (dist <= range.getValue() * range.getValue()) 
+                                {
+                                    Vec3d hitVec = new Vec3d(pos.getX() + 0.5 + dir.getOffsetX() * 0.5, 
+                                                             pos.getY() + 0.5 + dir.getOffsetY() * 0.5, 
+                                                             pos.getZ() + 0.5 + dir.getOffsetZ() * 0.5);
+                                    return new BlockHitResult(hitVec, dir, pos, false);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isShulkerBox(ItemStack stack) 
+    {
         Item item = stack.getItem();
         return item == Items.SHULKER_BOX ||
                 item == Items.WHITE_SHULKER_BOX ||
@@ -96,14 +189,29 @@ public class AutoFrameDupeModule extends ToggleModule
                 item == Items.BLACK_SHULKER_BOX;
     }
 
-    private int findShulkers() {
-        for (int i = 0; i < 9; i++) {
+    private int findShulkers() 
+    {
+        for (int i = 0; i < 9; i++) 
+        {
             ItemStack stack = mc.player.getInventory().getStack(i);
-            if (isShulkerBox(stack)) {
+            if (isShulkerBox(stack)) 
+            {
                 return i;
             }
         }
         return -1;
     }
 
+    private int findItemFrame() 
+    {
+        for (int i = 0; i < 36; i++) 
+        {
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            if (stack.getItem() == Items.ITEM_FRAME || stack.getItem() == Items.GLOW_ITEM_FRAME) 
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
 }

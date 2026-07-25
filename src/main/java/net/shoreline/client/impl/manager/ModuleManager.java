@@ -146,6 +146,7 @@ public final class ModuleManager
                 new NoJumpDelayModule(),
                 new NoSlowModule(),
                 new ParkourModule(),
+                new ReverseStepModule(),
                 new SafeWalkModule(),
                 new SpeedModule(),
                 new SprintModule(),

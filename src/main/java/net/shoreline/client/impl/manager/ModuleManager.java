@@ -181,7 +181,7 @@ public final class ModuleManager
                 new PhaseESPModule(),
                 new SearchModule(),
                 new ShadersModule(),
-                // new SkeletonModule(),
+                new SkeletonModule(),
                 new SkyboxModule(),
                 new StorageESPModule(),
                 new TooltipsModule(),

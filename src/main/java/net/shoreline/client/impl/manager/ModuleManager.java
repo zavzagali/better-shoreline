@@ -84,6 +84,7 @@ public final class ModuleManager
                 new FastLatencyModule(),
                 new FastProjectileModule(),
                 new GodModeModule(),
+                new HitboxDesyncModule(),
                 new InventorySyncModule(),
                 new NewChunksModule(),
                 new NoMineAnimationModule(),

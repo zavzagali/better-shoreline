@@ -12,6 +12,8 @@ import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
+import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.shoreline.client.api.config.Config;
 import net.shoreline.client.api.config.setting.BooleanConfig;
 import net.shoreline.client.api.config.setting.NumberConfig;
@@ -98,26 +100,52 @@ public class AutoFrameDupeModule extends ToggleModule
                 int frameSlot = findItemFrame();
                 if (frameSlot != -1) 
                 {
-                    int oldSlot = mc.player.getInventory().selectedSlot;
-
-                    if (frameSlot >= 9 && frameSlot < 36) 
-                    {
-                        mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, frameSlot, mc.player.getInventory().selectedSlot, SlotActionType.SWAP, mc.player);
-                    } 
-                    else if (frameSlot < 9) 
-                    {
-                        mc.player.getInventory().selectedSlot = frameSlot;
-                    }
-
                     BlockHitResult placementHit = findBestBlockInRange();
                     if (placementHit != null) 
                     {
-                        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, placementHit);
-                        mc.player.swingHand(Hand.MAIN_HAND); 
-                    }
+                        int oldSlot = mc.player.getInventory().selectedSlot;
+                        boolean swappedFromInv = false;
+                        Hand handToUse = Hand.MAIN_HAND;
 
-                    mc.player.getInventory().selectedSlot = oldSlot;
-                    timeoutTicks = 0;
+                        // Sol el (40) kontrolü
+                        if (frameSlot == 40) 
+                        {
+                            handToUse = Hand.OFF_HAND;
+                        }
+                        // Ana envanter (9-35) silent swap
+                        else if (frameSlot >= 9 && frameSlot < 36) 
+                        {
+                            mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, frameSlot, oldSlot, SlotActionType.SWAP, mc.player);
+                            swappedFromInv = true;
+                        } 
+                        // Hotbar (0-8) silent select packet
+                        else if (frameSlot < 9 && frameSlot != oldSlot) 
+                        {
+                            mc.player.getInventory().selectedSlot = frameSlot;
+                            mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(frameSlot));
+                        }
+
+                        // Yerleştirme
+                        mc.interactionManager.interactBlock(mc.player, handToUse, placementHit);
+                        mc.player.networkHandler.sendPacket(new HandSwingC2SPacket(handToUse));
+
+                        // Geri Alma (Silent Restore)
+                        if (swappedFromInv) 
+                        {
+                            mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, frameSlot, oldSlot, SlotActionType.SWAP, mc.player);
+                        } 
+                        else if (frameSlot < 9 && frameSlot != oldSlot) 
+                        {
+                            mc.player.getInventory().selectedSlot = oldSlot;
+                            mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(oldSlot));
+                        }
+
+                        timeoutTicks = 0;
+                    } 
+                    else 
+                    {
+                        timeoutTicks++;
+                    }
                 } 
                 else 
                 {
@@ -129,8 +157,8 @@ public class AutoFrameDupeModule extends ToggleModule
                 timeoutTicks++;
             }
         }
-    }
 
+    }
     private BlockHitResult findBestBlockInRange() 
     {
         BlockPos playerPos = mc.player.getBlockPos();
@@ -202,15 +230,17 @@ public class AutoFrameDupeModule extends ToggleModule
         return -1;
     }
 
-    private int findItemFrame() {
-    int inventorySize = mc.player.getInventory().size();
-    
-    for (int i = 0; i < inventorySize; i++) {
-        ItemStack stack = mc.player.getInventory().getStack(i);
-        
-        if (stack.getItem() == Items.ITEM_FRAME || stack.getItem() == Items.GLOW_ITEM_FRAME) {
-            return i; 
+    private int findItemFrame() 
+    {   
+        for (int i = 0; i < mc.player.getInventory().size(); i++) 
+        {
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            if (stack.getItem() == Items.ITEM_FRAME || stack.getItem() == Items.GLOW_ITEM_FRAME) 
+            {
+                return i;
+            }
         }
+        return -1;
     }
-    return -1; 
 }
+

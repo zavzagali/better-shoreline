@@ -202,16 +202,15 @@ public class AutoFrameDupeModule extends ToggleModule
         return -1;
     }
 
-    private int findItemFrame() 
-    {
-        for (int i = 0; i < 36; i++) 
-        {
-            ItemStack stack = mc.player.getInventory().getStack(i);
-            if (stack.getItem() == Items.ITEM_FRAME || stack.getItem() == Items.GLOW_ITEM_FRAME) 
-            {
-                return i;
-            }
+    private int findItemFrame() {
+    int inventorySize = mc.player.getInventory().size();
+    
+    for (int i = 0; i < inventorySize; i++) {
+        ItemStack stack = mc.player.getInventory().getStack(i);
+        
+        if (stack.getItem() == Items.ITEM_FRAME || stack.getItem() == Items.GLOW_ITEM_FRAME) {
+            return i; 
         }
-        return -1;
     }
+    return -1; 
 }

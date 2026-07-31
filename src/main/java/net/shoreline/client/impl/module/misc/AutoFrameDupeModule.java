@@ -42,122 +42,104 @@ public class AutoFrameDupeModule extends ToggleModule
     }
 
     @EventListener
-    public void onTick(TickEvent event)
-    {
+    public void onTick(TickEvent event) {
         if (mc.world == null || mc.player == null || mc.interactionManager == null) return;
 
         boolean foundFrame = false;
 
-        for (Entity entity : mc.world.getEntities()) 
-        {
-            if (entity instanceof ItemFrameEntity frame && mc.player.distanceTo(frame) <= range.getValue()) 
-            {
+        for (Entity entity : mc.world.getEntities()) {
+            if (entity instanceof ItemFrameEntity frame && mc.player.distanceTo(frame) <= range.getValue()) {
                 foundFrame = true;
-                if (timeoutTicks >= ticks.getValue()) 
-                {
+                if (timeoutTicks >= ticks.getValue()) {
                     ItemStack displayedItem = frame.getHeldItemStack();
                     boolean hasItem = !displayedItem.isEmpty();
                     boolean isHolding = !mc.player.getMainHandStack().isEmpty();
 
-                    if (switchxd.getValue() && (!isHolding || !isShulkerBox(mc.player.getMainHandStack()))) 
-                    {
+                    if (switchxd.getValue() && (!isHolding || !isShulkerBox(mc.player.getMainHandStack()))) {
                         int shulkerSlot = findShulkers();
-                        if (shulkerSlot != -1) 
-                        {
+                        if (shulkerSlot != -1) {
                             mc.player.getInventory().selectedSlot = shulkerSlot;
-                            isHolding = true; 
+                            isHolding = true;
                         }
                     }
 
-                    if (!hasItem && isHolding) 
-                    {
+                    if (!hasItem && isHolding) {
                         mc.interactionManager.interactEntity(mc.player, frame, Hand.MAIN_HAND);
                     }
 
-                    if (hasItem) 
-                    {
-                        for (int i = 0; i < turns.getValue(); i++) 
-                        {
+                    if (hasItem) {
+                        for (int i = 0; i < turns.getValue(); i++) {
                             mc.interactionManager.interactEntity(mc.player, frame, Hand.MAIN_HAND);
                         }
                         mc.interactionManager.attackEntity(mc.player, frame);
                     }
 
                     timeoutTicks = 0;
-                } 
-                else 
-                {
+                } else {
                     timeoutTicks++;
                 }
-                break; 
+                break;
             }
         }
 
-        if (!foundFrame && autoPlace.getValue()) 
-        {
-            if (timeoutTicks >= ticks.getValue()) 
-            {
+        if (!foundFrame && autoPlace.getValue()) {
+            if (timeoutTicks >= ticks.getValue()) {
                 int frameSlot = findItemFrame();
-                if (frameSlot != -1) 
-                {
+                if (frameSlot != -1) {
                     BlockHitResult placementHit = findBestBlockInRange();
-                    if (placementHit != null) 
-                    {
+                    if (placementHit != null) {
+                        BlockPos targetPos = placementHit.getBlockPos();
+
+                        Direction faceTowardsPlayer = mc.player.getHorizontalFacing().getOpposite();
+
+                        if (mc.player.getEyeY() >= targetPos.getY() + 1.0) {
+                            faceTowardsPlayer = Direction.UP;
+                        }
+
+                        placementHit = new BlockHitResult(
+                                placementHit.getPos(),
+                                faceTowardsPlayer,
+                                targetPos,
+                                placementHit.isInsideBlock()
+                        );
+
                         int oldSlot = mc.player.getInventory().selectedSlot;
                         boolean swappedFromInv = false;
                         Hand handToUse = Hand.MAIN_HAND;
 
-                        // Sol el (40) kontrolü
-                        if (frameSlot == 40) 
-                        {
+                        if (frameSlot == 40) {
                             handToUse = Hand.OFF_HAND;
                         }
-                        // Ana envanter (9-35) silent swap
-                        else if (frameSlot >= 9 && frameSlot < 36) 
-                        {
+                        else if (frameSlot >= 9 && frameSlot < 36) {
                             mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, frameSlot, oldSlot, SlotActionType.SWAP, mc.player);
                             swappedFromInv = true;
-                        } 
-                        // Hotbar (0-8) silent select packet
-                        else if (frameSlot < 9 && frameSlot != oldSlot) 
-                        {
+                        }
+                        else if (frameSlot < 9 && frameSlot != oldSlot) {
                             mc.player.getInventory().selectedSlot = frameSlot;
                             mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(frameSlot));
                         }
 
-                        // Yerleştirme
                         mc.interactionManager.interactBlock(mc.player, handToUse, placementHit);
                         mc.player.networkHandler.sendPacket(new HandSwingC2SPacket(handToUse));
 
-                        // Geri Alma (Silent Restore)
-                        if (swappedFromInv) 
-                        {
+                        if (swappedFromInv) {
                             mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, frameSlot, oldSlot, SlotActionType.SWAP, mc.player);
-                        } 
-                        else if (frameSlot < 9 && frameSlot != oldSlot) 
-                        {
+                        } else if (frameSlot < 9 && frameSlot != oldSlot) {
                             mc.player.getInventory().selectedSlot = oldSlot;
                             mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(oldSlot));
                         }
 
                         timeoutTicks = 0;
-                    } 
-                    else 
-                    {
+                    } else {
                         timeoutTicks++;
                     }
-                } 
-                else 
-                {
+                } else {
                     timeoutTicks++;
                 }
-            } 
-            else 
-            {
+            } else {
                 timeoutTicks++;
             }
         }
-
     }
     private BlockHitResult findBestBlockInRange() 
     {

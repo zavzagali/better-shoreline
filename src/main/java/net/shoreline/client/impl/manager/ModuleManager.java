@@ -51,6 +51,7 @@ public final class ModuleManager
                 new AutoBowReleaseModule(),
                 new AutoCrawlTrapModule(),
                 new AutoCrystalModule(),
+                new AutoElytraModule(),
                 new AutoLogModule(),
                 new AutoRegearModule(),
                 new AutoTotemModule(),
